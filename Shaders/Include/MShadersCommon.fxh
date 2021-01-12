@@ -140,6 +140,7 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
     }
 #endif
 
+// Bicubic function written by kingeric1992
 float3 tex2Dbicub(sampler texSampler, float2 coord)
 {
     float2 texsize = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
