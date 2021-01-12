@@ -240,15 +240,15 @@ TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
              "Atmospheric Density is a psuedo-volumetric\n"
              "fog shader. You will likely need to adjust\n"
              "the fog color to match your scene.",
-    PASS_RT  (VS_Tri, PS_Copy,       TexCopy)
-    PASS     (VS_Tri, PS_CopyDepth)
-    PASS_AVG ()
-    PASS     (VS_Tri, PS_Restore)
-    PASS     (VS_Tri, PS_Prep)
-    PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1)
-    PASS     (VS_Tri, PS_UpScale1)
-    PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1)
-    PASS_RT  (VS_Tri, PS_BlurH,      TexBlur2)
-    PASS_RT  (VS_Tri, PS_BlurV,      TexBlur1)
-    PASS_RT  (VS_Tri, PS_UpScale2,   TexBlur2)
-    PASS     (VS_Tri, PS_Combine))
+    PASS_RT  (VS_Tri, PS_Copy,       TexCopy)  // Copy the backbuffer
+    PASS     (VS_Tri, PS_CopyDepth)            // Write the depth buffer to backbuffer
+    PASS_AVG ()                                // Generate avgerage depth buffer luma
+    PASS     (VS_Tri, PS_Restore)              // Restore original backbuffer
+    PASS     (VS_Tri, PS_Prep)                 // Prepare the backbuffer for blurring
+    PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Downscale by 50%
+    PASS     (VS_Tri, PS_UpScale1)             // Upscale back to 100% with bicubic filtering (this is the small blur)
+    PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Scale down prepped backbuffer from above to 12.5%
+    PASS_RT  (VS_Tri, PS_BlurH,      TexBlur2) // Blur horizontally
+    PASS_RT  (VS_Tri, PS_BlurV,      TexBlur1) // Blur vertically
+    PASS_RT  (VS_Tri, PS_UpScale2,   TexBlur2) // Scale back up to 100% size
+    PASS     (VS_Tri, PS_Combine))             // Blend the blurred data and original backbuffer using depth
