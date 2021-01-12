@@ -33,6 +33,10 @@
 //////////////////////////////////////////////////
 #include "ReShade.fxh"
 #include "Include/MShadersMacros.fxh"
+
+#define TIMER_DATA
+#define INCLUDE_DITHER
+#define DEPTH_CHECK
 #include "Include/MShadersCommon.fxh"
 
 
@@ -122,14 +126,14 @@ float3 BlurV (float3 color, sampler SamplerColor, float2 coord)
 // COPY BACKBUFFER ///////////////////////////////
 void PS_Copy(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    color  = tex2Dfetch(TextureColor, vpos.xy).rgb;
+    color  = tex2D(TextureColor, coord).rgb;
 }
 
 // IMAGE PREP
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     float depth; float3 tint;
-    color  = tex2Dfetch(TextureColor, vpos.xy).rgb;
+    color  = tex2D(TextureColor, coord).rgb;
     depth  = ReShade::GetLinearizedDepth(coord);
 
     // Fog density setting (gamma controls how thick the fog is)
@@ -158,24 +162,24 @@ void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 // BI-LATERAL GAUSSIAN BLUR //////////////////////
 void PS_BlurH(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    color  = tex2Dfetch(TextureBlur1, vpos.xy).rgb;
+    color  = tex2D(TextureBlur1, coord).rgb;
     color  = BlurH(color, TextureBlur1, coord);
 }
 void PS_BlurV(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    color  = tex2Dfetch(TextureBlur2, vpos.xy).rgb;
+    color  = tex2D(TextureBlur2, coord).rgb;
     color  = BlurV(color, TextureBlur2, coord);
 }
 
 // SCALE UP //////////////////////////////////////
 void PS_UpScale1(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    color  = tex2DBicubic(TextureBlur1, SCALE(coord, 2.0)).rgb;
+    color  = tex2Dbicub(TextureBlur1, SCALE(coord, 2.0)).rgb;
 }
 
 void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    color  = tex2DBicubic(TextureBlur1, SCALE(coord, 8.0)).rgb;
+    color  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
 }
 
 // DRAW FOG //////////////////////////////////////
@@ -183,9 +187,9 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     float3 blur, blur2, tint; float depth;
 
-    blur   = tex2Dfetch(TextureBlur2, vpos.xy).rgb;
-    blur2  = tex2Dfetch(TextureColor, vpos.xy).rgb;
-    color  = tex2Dfetch(TextureCopy,  vpos.xy).rgb;
+    blur   = tex2D(TextureBlur2, coord).rgb;
+    blur2  = tex2D(TextureColor, coord).rgb;
+    color  = tex2D(TextureCopy,  coord).rgb;
     depth  = ReShade::GetLinearizedDepth(coord);
 
     // Fog density setting (gamma controls how thick the fog is)

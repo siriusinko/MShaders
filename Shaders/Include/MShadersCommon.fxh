@@ -30,14 +30,28 @@
 
 // GLOBAL VALUES /////////////////////////////////
 //////////////////////////////////////////////////
-uniform float  Timer        < source = "timer"; >;
-uniform float  Frametime    < source = "frametime"; >;
-#define        Framerate     (1000.0 /  Frametime)
-uniform int    Framecount   < source = "framecount"; >;
+#ifdef TIMER_DATA
+    uniform float  Timer        < source = "timer"; >;
+#endif
+
+#ifdef FPS_DATA
+    uniform float  Frametime    < source = "frametime"; >;
+    #define        Framerate     (1000.0 /  Frametime)
+    uniform int    Framecount   < source = "framecount"; >;
+#endif
+
+#ifdef TIME_DATA
 uniform float4 Date         < source = "date"; >;
+#endif
+
+#ifdef DEPTH_CHECK
 uniform bool   HasDepth     < source = "bufready_depth"; >;
+#endif
+
+#ifdef OVERLAY_CHECK
 uniform bool   OverlayOpen  < source = "overlay_open"; >;
-#define        remap(v, a, b) (((v) - (a)) / ((b) - (a)))
+#endif
+
 #define        BitDepth       BUFFER_COLOR_BIT_DEPTH
 
 // GLOBAL TEXTURES ///////////////////////////////
@@ -71,54 +85,58 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
 	vpos = float4(coord * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
 }
 
-// GLOABL FUNCTIONS //////////////////////////////
+// GLOBAL FUNCTIONS //////////////////////////////
 //////////////////////////////////////////////////
-float rand21(float2 uv)
-{
-    float2 noise = frac(sin(dot(uv, float2(12.9898, 78.233) * 2.0)) * 43758.5453);
-    return (noise.x + noise.y) * 0.5;
-}
+#ifdef INCLUDE_DITHER
+    #define        remap(v, a, b) (((v) - (a)) / ((b) - (a)))
 
-float rand11(float x)
-{
-    return frac(x * 0.024390243);
-}
+    float rand21(float2 uv)
+    {
+        float2 noise = frac(sin(dot(uv, float2(12.9898, 78.233) * 2.0)) * 43758.5453);
+        return (noise.x + noise.y) * 0.5;
+    }
 
-float permute(float x)
-{
-    return ((34.0 * x + 1.0) * x) % 289.0;
-}
+    float rand11(float x)
+    {
+        return frac(x * 0.024390243);
+    }
 
-////////////////////////////////////////////////////
-// Triangular Dither                              //
-// <> by The Sandvich Maker                       //
-////////////////////////////////////////////////////
-float3 Dither(float3 color, float2 uv, int bits)
-{
-    static const float bitstep = pow(2.0, bits) - 1.0;
-    static const float lsb = 1.0 / bitstep;
-    static const float lobit = 0.5 / bitstep;
-    static const float hibit = (bitstep - 0.5) / bitstep;
+    float permute(float x)
+    {
+        return ((34.0 * x + 1.0) * x) % 289.0;
+    }
 
-    float3 m = float3(uv, rand21(uv + Timer)) + 1.0;
-    float h = permute(permute(permute(m.x) + m.y) + m.z);
+    ////////////////////////////////////////////////////
+    // Triangular Dither                              //
+    // <> by The Sandvich Maker                       //
+    ////////////////////////////////////////////////////
+    float3 Dither(float3 color, float2 uv, int bits)
+    {
+        static const float bitstep = pow(2.0, bits) - 1.0;
+        static const float lsb = 1.0 / bitstep;
+        static const float lobit = 0.5 / bitstep;
+        static const float hibit = (bitstep - 0.5) / bitstep;
 
-    float3 noise1, noise2;
-    noise1.x = rand11(h); h = permute(h);
-    noise2.x = rand11(h); h = permute(h);
-    noise1.y = rand11(h); h = permute(h);
-    noise2.y = rand11(h); h = permute(h);
-    noise1.z = rand11(h); h = permute(h);
-    noise2.z = rand11(h);
+        float3 m = float3(uv, rand21(uv + Timer)) + 1.0;
+        float h = permute(permute(permute(m.x) + m.y) + m.z);
 
-    float3 lo = saturate(remap(color.xyz, 0.0, lobit));
-    float3 hi = saturate(remap(color.xyz, 1.0, hibit));
-    float3 uni = noise1 - 0.5;
-    float3 tri = noise1 - noise2;
-	 return lerp(uni, tri, min(lo, hi)) * lsb;
-}
+        float3 noise1, noise2;
+        noise1.x = rand11(h); h = permute(h);
+        noise2.x = rand11(h); h = permute(h);
+        noise1.y = rand11(h); h = permute(h);
+        noise2.y = rand11(h); h = permute(h);
+        noise1.z = rand11(h); h = permute(h);
+        noise2.z = rand11(h);
 
-float3 tex2DBicubic(sampler texSampler, float2 coord)
+        float3 lo = saturate(remap(color.xyz, 0.0, lobit));
+        float3 hi = saturate(remap(color.xyz, 1.0, hibit));
+        float3 uni = noise1 - 0.5;
+        float3 tri = noise1 - noise2;
+    	 return lerp(uni, tri, min(lo, hi)) * lsb;
+    }
+#endif
+
+float3 tex2Dbicub(sampler texSampler, float2 coord)
 {
     float2 texsize = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
 
