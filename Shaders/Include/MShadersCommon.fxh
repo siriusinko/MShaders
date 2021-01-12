@@ -30,25 +30,25 @@
 
 // GLOBAL VALUES /////////////////////////////////
 //////////////////////////////////////////////////
-#ifdef TIMER_DATA
+#ifdef _TIMER_DATA
     uniform float  Timer      < source = "timer"; >;
 #endif
 
-#ifdef FPS_DATA
+#ifdef _FPS_DATA
     uniform float  Frametime  < source = "frametime"; >;
     #define        Framerate   (1000.0 /  Frametime)
     uniform int    Framecount < source = "framecount"; >;
 #endif
 
-#ifdef TIME_DATA
+#ifdef _TIME_DATA
 uniform float4 Date           < source = "date"; >;
 #endif
 
-#ifdef DEPTH_CHECK
+#ifdef _DEPTH_CHECK
 uniform bool   HasDepth      < source = "bufready_depth"; >;
 #endif
 
-#ifdef OVERLAY_CHECK
+#ifdef _OVERLAY_CHECK
 uniform bool   OverlayOpen   < source = "overlay_open"; >;
 #endif
 
@@ -91,7 +91,7 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
 
 // GLOBAL FUNCTIONS //////////////////////////////
 //////////////////////////////////////////////////
-#ifdef INCLUDE_DITHER
+#ifdef _INCLUDE_DITHER
     #define        remap(v, a, b) (((v) - (a)) / ((b) - (a)))
 
     float rand21(float2 uv)

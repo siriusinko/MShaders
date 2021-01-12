@@ -34,9 +34,9 @@
 #include "ReShade.fxh"
 #include "Include/MShadersMacros.fxh"
 
-#define TIMER_DATA
-#define INCLUDE_DITHER
-#define DEPTH_CHECK
+#define _TIMER_DATA
+#define _INCLUDE_DITHER
+#define _DEPTH_CHECK
 #include "Include/MShadersCommon.fxh"
 
 
