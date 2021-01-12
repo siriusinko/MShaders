@@ -51,6 +51,8 @@ UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 0)
 
 // FUNCTIONS /////////////////////////////////////
 //////////////////////////////////////////////////
+#include "Include/Functions/AVGen.fxh"
+
 float3 BlurH (float3 color, sampler SamplerColor, float2 coord)
 {
     float offset[18] =
@@ -123,10 +125,23 @@ float3 BlurV (float3 color, sampler SamplerColor, float2 coord)
 // SHADERS ///////////////////////////////////////
 //////////////////////////////////////////////////
 #define PS_IN(v, c) float4 v : SV_Position, float2 c : TEXCOORD // Laziness macros FTW
+
 // COPY BACKBUFFER ///////////////////////////////
 void PS_Copy(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2D(TextureColor, coord).rgb;
+}
+
+// CHECK DEPTH BUFFER ////////////////////////////
+void PS_CopyDepth(PS_IN(vpos, coord), out float3 color : SV_Target)
+{
+    color  = ReShade::GetLinearizedDepth(coord);
+}
+
+// RESTORE BACKBUFFER ////////////////////////////
+void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
+{
+    color  = tex2D(TextureCopy, coord).rgb;
 }
 
 // IMAGE PREP
@@ -185,47 +200,55 @@ void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 // DRAW FOG //////////////////////////////////////
 void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    float3 blur, blur2, tint; float depth;
+    float3 orig, blur, blur2, tint; float depth, depth_avg;
 
-    blur   = tex2D(TextureBlur2, coord).rgb;
-    blur2  = tex2D(TextureColor, coord).rgb;
-    color  = tex2D(TextureCopy,  coord).rgb;
-    depth  = ReShade::GetLinearizedDepth(coord);
+    blur      = tex2D(TextureBlur2, coord).rgb;
+    blur2     = tex2D(TextureColor, coord).rgb;
+    color     = tex2D(TextureCopy,  coord).rgb;
+    depth     = ReShade::GetLinearizedDepth(coord);
+    depth_avg = avGen::get();
+    orig      = color;
 
     // Fog density setting (gamma controls how thick the fog is)
-    depth  = pow(abs(depth), lerp(10.0, 0.33, DISTANCE * 0.01));
+    depth     = pow(abs(depth), lerp(10.0, 0.33, DISTANCE * 0.01));
 
     // Use small blur texture to decrease distant detail
-    color  = lerp(color, blur2, depth);
+    color     = lerp(color, blur2, depth);
 
     // Darken the already dark parts of the image to give an impression of "shadowing" from fog using the large blur texture
     // Blending this way avoids extra dark halos on bright areas like the sky
-    color  = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)));
+    color     = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)));
 
     // Overlay the blur texture while lifting its gamma.
     // Mask protects highlights from being darkened
-    color  = lerp(color, pow(abs(blur), 0.75), depth * saturate(1-GetLuma(color * 0.75)));
+    color     = lerp(color, pow(abs(blur), 0.75), depth * saturate(1-GetLuma(color * 0.75)));
 
     // Do some additive blending to give the impression of scene lights affecting the fog
-    color  = lerp(color, (color + pow(abs(blur), 0.5)) * 0.5, depth);
+    color     = lerp(color, (color + pow(abs(blur), 0.5)) * 0.5, depth);
 
     // Dither to kill any banding
-    color += Dither(color, coord, BitDepth);
+    color    += Dither(color, coord, BitDepth);
+
+    if ((depth_avg == 0.0) || (depth_avg == 1.0))
+    color     = orig;
 }
 
 
 // TECHNIQUES ////////////////////////////////////
 //////////////////////////////////////////////////
-TECHNIQUE   (AtmosphericDensity,   "Atmospheric Density",
-            "Atmospheric Density is a psuedo-volumetric\n"
-            "fog shader. You will likely need to adjust\n"
-            "the fog color to match your scene.",
-    PASS    (VS_Tri, PS_Prep)
-    PASS_RT (VS_Tri, PS_Copy,       TexCopy)
-    PASS_RT (VS_Tri, PS_Downscale1, TexBlur1)
-    PASS    (VS_Tri, PS_UpScale1)
-    PASS_RT (VS_Tri, PS_Downscale2, TexBlur1)
-    PASS_RT (VS_Tri, PS_BlurH,      TexBlur2)
-    PASS_RT (VS_Tri, PS_BlurV,      TexBlur1)
-    PASS_RT (VS_Tri, PS_UpScale2,   TexBlur2)
-    PASS    (VS_Tri, PS_Combine))
+TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
+             "Atmospheric Density is a psuedo-volumetric\n"
+             "fog shader. You will likely need to adjust\n"
+             "the fog color to match your scene.",
+    PASS_RT  (VS_Tri, PS_Copy,       TexCopy)
+    PASS     (VS_Tri, PS_CopyDepth)
+    PASS_AVG ()
+    PASS     (VS_Tri, PS_Restore)
+    PASS     (VS_Tri, PS_Prep)
+    PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1)
+    PASS     (VS_Tri, PS_UpScale1)
+    PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1)
+    PASS_RT  (VS_Tri, PS_BlurH,      TexBlur2)
+    PASS_RT  (VS_Tri, PS_BlurV,      TexBlur1)
+    PASS_RT  (VS_Tri, PS_UpScale2,   TexBlur2)
+    PASS     (VS_Tri, PS_Combine))
