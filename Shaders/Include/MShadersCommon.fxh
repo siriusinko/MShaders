@@ -63,7 +63,7 @@ texture TexDepth : DEPTH;
 #if (BitDepth < 10)
     TEXTURE_FULL (TexCopy, BUFFER_WIDTH, BUFFER_HEIGHT, RGBA8)
 #else
-    TEXTURE_FULL (TexCopy, BUFFER_WIDTH, BUFFER_HEIGHT, RGBA10)
+    TEXTURE_FULL (TexCopy, BUFFER_WIDTH, BUFFER_HEIGHT, RGB10A2)
 #endif
 
 TEXTURE_FULL (TexBlur1,    BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
@@ -72,9 +72,9 @@ TEXTURE_FULL (TexBlur2,    BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
 
 // SAMPLERS //////////////////////////////////////
 //////////////////////////////////////////////////
-SAMPLER_UV  (TextureColor, TexColor, MIRROR)
-SAMPLER_UV  (TextureDepth, TexDepth, MIRROR)
-SAMPLER_UV  (TextureCopy,  TexCopy,  MIRROR)
+SAMPLER_UV  (TextureColor, TexColor, BORDER)
+SAMPLER_UV  (TextureDepth, TexDepth, BORDER)
+SAMPLER_UV  (TextureCopy,  TexCopy,  BORDER)
 SAMPLER_UV  (TextureBlur1, TexBlur1, MIRROR)
 SAMPLER_UV  (TextureBlur2, TexBlur2, MIRROR)
 
