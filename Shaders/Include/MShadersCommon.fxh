@@ -31,50 +31,53 @@
 // GLOBAL VALUES /////////////////////////////////
 //////////////////////////////////////////////////
 #ifdef TIMER_DATA
-    uniform float  Timer        < source = "timer"; >;
+    uniform float  Timer      < source = "timer"; >;
 #endif
 
 #ifdef FPS_DATA
-    uniform float  Frametime    < source = "frametime"; >;
-    #define        Framerate     (1000.0 /  Frametime)
-    uniform int    Framecount   < source = "framecount"; >;
+    uniform float  Frametime  < source = "frametime"; >;
+    #define        Framerate   (1000.0 /  Frametime)
+    uniform int    Framecount < source = "framecount"; >;
 #endif
 
 #ifdef TIME_DATA
-uniform float4 Date         < source = "date"; >;
+uniform float4 Date           < source = "date"; >;
 #endif
 
 #ifdef DEPTH_CHECK
-uniform bool   HasDepth     < source = "bufready_depth"; >;
+uniform bool   HasDepth      < source = "bufready_depth"; >;
 #endif
 
 #ifdef OVERLAY_CHECK
-uniform bool   OverlayOpen  < source = "overlay_open"; >;
+uniform bool   OverlayOpen   < source = "overlay_open"; >;
 #endif
 
-#define        BitDepth       BUFFER_COLOR_BIT_DEPTH
 
 // GLOBAL TEXTURES ///////////////////////////////
 //////////////////////////////////////////////////
-texture       TexColor : COLOR;
-texture       TexDepth : DEPTH;
+texture TexColor : COLOR;
+texture TexDepth : DEPTH;
+
+#define BitDepth           BUFFER_COLOR_BIT_DEPTH
 
 #if (BitDepth < 10)
-    TEXTURE_FULL (TexCopy,   BUFFER_WIDTH, BUFFER_HEIGHT, RGBA8)
+    TEXTURE_FULL (TexCopy, BUFFER_WIDTH, BUFFER_HEIGHT, RGBA8)
 #else
-    TEXTURE_FULL (TexCopy,   BUFFER_WIDTH, BUFFER_HEIGHT, RGBA10)
+    TEXTURE_FULL (TexCopy, BUFFER_WIDTH, BUFFER_HEIGHT, RGBA10)
 #endif
 
-TEXTURE_FULL (TexBlur1,     BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
-TEXTURE_FULL (TexBlur2,     BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
+TEXTURE_FULL (TexBlur1,    BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
+TEXTURE_FULL (TexBlur2,    BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
+
 
 // SAMPLERS //////////////////////////////////////
 //////////////////////////////////////////////////
-SAMPLER_UV  (TextureColor,     TexColor,     MIRROR)
-SAMPLER_UV  (TextureDepth,     TexDepth,     MIRROR)
-SAMPLER_UV  (TextureCopy,      TexCopy,      MIRROR)
-SAMPLER_UV  (TextureBlur1,     TexBlur1,     MIRROR)
-SAMPLER_UV  (TextureBlur2,     TexBlur2,     MIRROR)
+SAMPLER_UV  (TextureColor, TexColor, MIRROR)
+SAMPLER_UV  (TextureDepth, TexDepth, MIRROR)
+SAMPLER_UV  (TextureCopy,  TexCopy,  MIRROR)
+SAMPLER_UV  (TextureBlur1, TexBlur1, MIRROR)
+SAMPLER_UV  (TextureBlur2, TexBlur2, MIRROR)
+
 
 // VERTEX SHADER /////////////////////////////////
 //////////////////////////////////////////////////
@@ -84,6 +87,7 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
 	coord.y = (id == 1) ? 2.0 : 0.0;
 	vpos = float4(coord * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
 }
+
 
 // GLOBAL FUNCTIONS //////////////////////////////
 //////////////////////////////////////////////////
@@ -112,7 +116,7 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
     ////////////////////////////////////////////////////
     float3 Dither(float3 color, float2 uv, int bits)
     {
-        static const float bitstep = pow(2.0, bits) - 1.0;
+        static const float bitstep = exp2(bits) - 1.0;
         static const float lsb = 1.0 / bitstep;
         static const float lobit = 0.5 / bitstep;
         static const float hibit = (bitstep - 0.5) / bitstep;
