@@ -395,9 +395,9 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
         color = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)) * sky);
     }
 
-    // Overlay the blur texture while lifting its gamma.
+    // Overlay the blur texture (while lifting its gamma in "Exact Fog Color" mode in the UI).
     // Mask protects highlights from being darkened
-    color     = lerp(color, pow(abs(blur), 0.75), depth * saturate(1-GetLuma(color * 0.75)));
+    color     = lerp(color, pow(abs(blur), lerp(0.75, 1.0, (AUTO_COLOR != 0))), depth * saturate(1-GetLuma(color * 0.75)));
 
     // Do some additive blending to give the impression of scene lights affecting the fog
     color     = lerp(color, (color + pow(abs(blur), 0.5)) * 0.5, depth);
