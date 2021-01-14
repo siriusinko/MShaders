@@ -223,8 +223,8 @@ void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
 // IMAGE PREP
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    float depth, sky, luma;
-    float3 tint, orig, width;
+    float depth, sky, width, luma;
+    float3 tint, orig;
     color  = tex2D(TextureColor, coord).rgb;
     luma   = tex2D(TextureBlur2, coord).x;
     depth  = ReShade::GetLinearizedDepth(coord);
@@ -260,7 +260,7 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 
     // Overlay fog color to the scene before blurring in next step.
     // Additional masking for highlight protection. Code is a mess, I know.
-    color  = lerp(color, min(max(tint, 0.125), 1.0), depth * (1-smoothstep(0.0, 1.0, color) * (smoothstep(1.0, lerp(0.5, lerp(1.0, 0.75, DISTANCE * 0.01), HIGHLIGHT_DIST * 0.01), depth))));
+    color  = lerp(color, lerp(tint + 0.125, tint, tint), depth * (1-smoothstep(0.0, 1.0, color) * (smoothstep(1.0, lerp(0.5, lerp(1.0, 0.75, DISTANCE * 0.01), HIGHLIGHT_DIST * 0.01), depth))));
                          // Avoid black fog                      // Protect highlights using smoothstep on color input, then place the highlights in the scene with a second smoothstep depth mask
                                                                  // (this avoids the original sky color bleeding in on "Exact Fog Color" mode in the UI)
 }
