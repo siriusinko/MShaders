@@ -222,6 +222,19 @@ void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
 }
 
 // IMAGE PREP
+void PS_PrepLuma(PS_IN(vpos, coord), out float3 luma : SV_Target)
+{
+    float depth, sky;
+    depth  = ReShade::GetLinearizedDepth(coord);
+    sky    = all(1-depth);
+
+    luma = tex2D(TextureColor, coord).rgb;
+
+    luma = lerp(luma, pow(luma, lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
+
+    luma = GetLuma(luma);
+}
+
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     float depth, sky, width, luma;
@@ -238,7 +251,7 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     color  = lerp(color, pow(color, lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
 
     // Desaturate slightly with distance
-    color  = lerp(color, lerp(luma, color, 0.75), depth);
+    color  = lerp(color, lerp(GetLuma(color), color, lerp(0.75, 1.0, (AUTO_COLOR != 0))), depth);
 
     // Grab the user defined color value for fog
     tint   = FOG_TINT;
@@ -275,12 +288,12 @@ void PS_Downscale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
     if (AUTO_COLOR > 1)
     {
         // Scale down to 12.5% before the blur passes
-        luma = GetLuma(tex2D(TextureColor, SCALE(coord, 0.125)).rgb);
+        luma = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
     }
     else
     {
         // Pass through
-        luma = GetLuma(tex2D(TextureColor, coord).rgb);
+        luma = tex2D(TextureColor, coord).rgb;
     }
 
     luma += Dither(luma, coord, BitDepth);
@@ -425,6 +438,7 @@ TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
     PASS     (VS_Tri, PS_Restore)              // Restore original backbuffer
 
     // Blur the scene luminance
+    PASS_RT  (VS_Tri, PS_PrepLuma,   TexBlur2) // Prepare the scene for luma blurring
     PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Scale down scene luma 12.5%
     PASS_RT  (VS_Tri, PS_LumaBlurH,  TexBlur2) // Blur horizontally
     PASS_RT  (VS_Tri, PS_LumaBlurV,  TexBlur1) // Blur vertically
