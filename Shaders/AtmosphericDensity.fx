@@ -49,7 +49,7 @@
 UI_INT_S (DISTANCE, "Density", "Determines the apparent thickness of the fog.", 1, 100, 75, 0)
 UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "Controls how far into the fog that highlights can penetrate.", 0, 100, 100, 1)
 UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 5)
-UI_COMBO (AUTO_COLOR, "Color Mode", "", 2, 1,
+UI_COMBO (AUTO_COLOR, "Color Mode", "", 3, 1,
     "Exact Fog Color\0"
     "Preserve Scene Luminance\0"
     "Use Blurred Scene Luminance\0")
@@ -262,35 +262,46 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     // Additional masking for highlight protection. Code is a mess, I know.
     color  = lerp(color, min(max(tint, 0.125), 1.0), depth * (1-smoothstep(0.0, 1.0, color) * (smoothstep(1.0, lerp(0.5, lerp(1.0, 0.75, DISTANCE * 0.01), HIGHLIGHT_DIST * 0.01), depth))));
                          // Avoid black fog                      // Protect highlights using smoothstep on color input, then place the highlights in the scene with a second smoothstep depth mask
-                                                                 // (this avoids the original sky color bleeding in)
+                                                                 // (this avoids the original sky color bleeding in on "Exact Fog Color" mode in the UI)
 }
 
 // SCALE DOWN ////////////////////////////////////
+
+// Luma downscale
 void PS_Downscale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
 {
+    // If modifying fog color by blurred scene luminance
     if (AUTO_COLOR > 1)
     {
+        // Scale down to 12.5% before the blur passes
         luma = GetLuma(tex2D(TextureColor, SCALE(coord, 0.125)).rgb);
     }
     else
     {
+        // Pass through
         luma = GetLuma(tex2D(TextureColor, coord).rgb);
     }
 
     luma += Dither(luma, coord, BitDepth);
 }
 
+// Downscale pass for simple downscale +  bi-cubic upscale for small blur
 void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
+    // Scale down to 50% before the blur passes
     color  = tex2D(TextureColor, SCALE(coord, 0.5)).rgb;
 }
 
+// Downscale pass for the large blur
 void PS_Downscale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
+    // Scale down to 12.5% before the blur passes
     color  = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
 }
 
 // BI-LATERAL GAUSSIAN BLUR //////////////////////
+
+// Luma blur horizontal pass
 void PS_LumaBlurH(PS_IN(vpos, coord), out float3 luma : SV_Target)
 {
     luma = tex2D(TextureBlur1, coord).x;
@@ -300,6 +311,7 @@ void PS_LumaBlurH(PS_IN(vpos, coord), out float3 luma : SV_Target)
         luma  = BlurH(luma, TextureBlur1, coord).xxx;
     }
 }
+// Luma blur vertical pass
 void PS_LumaBlurV(PS_IN(vpos, coord), out float3 luma : SV_Target)
 {
     luma  = tex2D(TextureBlur2, coord).x;
@@ -309,11 +321,14 @@ void PS_LumaBlurV(PS_IN(vpos, coord), out float3 luma : SV_Target)
         luma = BlurV(luma, TextureBlur2, coord).xxx;
     }
 }
+
+// Large color blur horizontal pass
 void PS_BlurH(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2D(TextureBlur1, coord).rgb;
     color  = BlurH(color, TextureBlur1, coord);
 }
+// Large color blur vertical pass
 void PS_BlurV(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2D(TextureBlur2, coord).rgb;
@@ -323,23 +338,28 @@ void PS_BlurV(PS_IN(vpos, coord), out float3 color : SV_Target)
 // SCALE UP //////////////////////////////////////
 void PS_UpScale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
 {
+    // If modifying fog color by blurred scene luminance
     if (AUTO_COLOR > 1)
     {
+        // Scale back up to 100%
         luma  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
     }
     else
     {
+        // Pass through
         luma  = tex2D(TextureBlur1, coord).xxx;
     }
 }
 
 void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
+    // Scale simple downscale/upscale blur back up to 100%
     color  = tex2Dbicub(TextureBlur1, SCALE(coord, 2.0)).rgb;
 }
 
 void PS_UpScale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
+    // Scale color blur back up to 100%
     color  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
 }
 
@@ -357,7 +377,6 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
     depth_avg = avGen::get().x;
     orig      = color;
 
-
     // Fog density setting (gamma controls how thick the fog is)
     depth     = pow(abs(depth), lerp(10.0, 0.33, DISTANCE * 0.01));
 
@@ -368,7 +387,7 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
     // Blending this way avoids extra dark halos on bright areas like the sky
     if (AUTO_COLOR < 1)
     {
-        color     = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)) * sky);
+        color = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)) * sky);
     }
 
     // Overlay the blur texture while lifting its gamma.
@@ -381,6 +400,7 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
     // Dither to kill any banding
     color    += Dither(color, coord, BitDepth);
 
+    // Try to detect when depth buffer is blank to avoid drawing over menus
     if ((depth_avg == 0.0) || (depth_avg == 1.0))
     color     = orig;
 }
@@ -392,19 +412,31 @@ TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
              "Atmospheric Density is a psuedo-volumetric\n"
              "fog shader. You will likely need to adjust\n"
              "the fog color to match your scene.",
+
+    // Try to detect depth buffer when it is blank to avoid drawing over stuff like pause menus
     PASS_RT  (VS_Tri, PS_Copy,       TexCopy)  // Copy the backbuffer
     PASS     (VS_Tri, PS_CopyDepth)            // Write the depth buffer to backbuffer
     PASS_AVG ()                                // Generate avgerage depth buffer luma (This helps detect when depth is blank in menus in certain games)
     PASS     (VS_Tri, PS_Restore)              // Restore original backbuffer
+
+    // Blur the scene luminance
     PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Scale down scene luma 12.5%
     PASS_RT  (VS_Tri, PS_LumaBlurH,  TexBlur2) // Blur horizontally
     PASS_RT  (VS_Tri, PS_LumaBlurV,  TexBlur1) // Blur vertically
     PASS_RT  (VS_Tri, PS_UpScale1,   TexBlur2) // Scale scene luma back up to 100% size
+
+    // Prepare the scene for the color blur pass
     PASS     (VS_Tri, PS_Prep)                 // Prepare the backbuffer for blurring
+
+    // Do a quick downscale + bi-cubic upsale for a small cheap blur
     PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Downscale by 50%
     PASS     (VS_Tri, PS_UpScale2)             // Upscale back to 100% with bi-cubic filtering (this is the small blur)
+
+    // Downscale + blur + upscale for very large blur radius
     PASS_RT  (VS_Tri, PS_Downscale3, TexBlur1) // Scale down prepped backbuffer from above to 12.5%
     PASS_RT  (VS_Tri, PS_BlurH,      TexBlur2) // Blur horizontally
     PASS_RT  (VS_Tri, PS_BlurV,      TexBlur1) // Blur vertically
     PASS_RT  (VS_Tri, PS_UpScale3,   TexBlur2) // Scale back up to 100% size
+
+    // Combine the various blurs and draw the fog
     PASS     (VS_Tri, PS_Combine))             // Blend the blurred data and original backbuffer using depth
