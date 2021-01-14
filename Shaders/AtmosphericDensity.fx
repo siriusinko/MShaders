@@ -286,7 +286,7 @@ void PS_Downscale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
     luma += Dither(luma, coord, BitDepth);
 }
 
-// Downscale pass for simple downscale +  bi-cubic upscale for small blur
+// Downscale pass for simple downscale + bi-cubic upscale for small blur
 void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     // Scale down to 50% before the blur passes
@@ -337,6 +337,8 @@ void PS_BlurV(PS_IN(vpos, coord), out float3 color : SV_Target)
 }
 
 // SCALE UP //////////////////////////////////////
+
+// Luma upscale
 void PS_UpScale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
 {
     // If modifying fog color by blurred scene luminance
@@ -352,12 +354,14 @@ void PS_UpScale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
     }
 }
 
+// Simple blur upscale
 void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     // Scale simple downscale/upscale blur back up to 100%
     color  = tex2Dbicub(TextureBlur1, SCALE(coord, 2.0)).rgb;
 }
 
+// Large blur upscale
 void PS_UpScale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     // Scale color blur back up to 100%
@@ -429,7 +433,7 @@ TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
     // Prepare the scene for the color blur pass
     PASS     (VS_Tri, PS_Prep)                 // Prepare the backbuffer for blurring
 
-    // Do a quick downscale + bi-cubic upsale for a small cheap blur
+    // Do a quick downscale + bi-cubic upscale for a small cheap blur
     PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Downscale by 50%
     PASS     (VS_Tri, PS_UpScale2)             // Upscale back to 100% with bi-cubic filtering (this is the small blur)
 
