@@ -50,13 +50,84 @@
 UI_INT_S (DISTANCE, "Density", "Determines the apparent thickness of the fog.", 1, 100, 75, 0)
 UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "Controls how far into the fog that highlights can penetrate.", 0, 100, 100, 0)
 UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 0)
-UI_BOOL  (AUTO_COLOR, "Use Hue Only", "Only uses the hue of the selected color while preserving the brightness of the background.", false, 0)
+UI_COMBO (AUTO_COLOR, "Color Mode", "", 0, 0,
+    "Exact Fog Color\0"
+    "Preserve Scene Luminance\0"
+    "Use Blurred Scene Luminance\0")
 #undef  CATEGORY ///////////////////////////////////////////////////////////////
 
 
 // FUNCTIONS ///////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 #include "Include/Functions/AVGen.fxh"
+
+float3 BlurH (float luma, sampler Samplerluma, float2 coord)
+{
+    float offset[18] =
+    {
+        0.0,            1.4953705027, 3.4891992113,
+        5.4830312105,   7.4768683759, 9.4707125766,
+        11.4645656736, 13.4584295168, 15.4523059431,
+        17.4461967743, 19.4661974725, 21.4627427973,
+        23.4592916956, 25.455844494,  27.4524015179,
+        29.4489630909, 31.445529535,  33.4421011704
+    };
+
+    float kernel[18] =
+    {
+        0.033245,     0.0659162217, 0.0636705814,
+        0.0598194658, 0.0546642566, 0.0485871646,
+        0.0420045997, 0.0353207015, 0.0288880982,
+        0.0229808311, 0.0177815511, 0.013382297,
+        0.0097960001, 0.0069746748, 0.0048301008,
+        0.0032534598, 0.0021315311, 0.0013582974
+    };
+
+    luma *= kernel[0];
+
+    [loop]
+    for(int i = 1; i < 18; ++i)
+    {
+        luma += tex2D(Samplerluma, coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0)).x * kernel[i];
+        luma += tex2D(Samplerluma, coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0)).x * kernel[i];
+    }
+
+    return float3(luma.xxx);
+}
+
+float3 BlurV (float luma, sampler Samplerluma, float2 coord)
+{
+    float offset[18] =
+    {
+        0.0,            1.4953705027, 3.4891992113,
+        5.4830312105,   7.4768683759, 9.4707125766,
+        11.4645656736, 13.4584295168, 15.4523059431,
+        17.4461967743, 19.4661974725, 21.4627427973,
+        23.4592916956, 25.455844494,  27.4524015179,
+        29.4489630909, 31.445529535,  33.4421011704
+    };
+
+    float kernel[18] =
+    {
+        0.033245,     0.0659162217, 0.0636705814,
+        0.0598194658, 0.0546642566, 0.0485871646,
+        0.0420045997, 0.0353207015, 0.0288880982,
+        0.0229808311, 0.0177815511, 0.013382297,
+        0.0097960001, 0.0069746748, 0.0048301008,
+        0.0032534598, 0.0021315311, 0.0013582974
+    };
+
+    luma *= kernel[0];
+
+    [loop]
+    for(int i = 1; i < 18; ++i)
+    {
+        luma += tex2D(Samplerluma, coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y)).x * kernel[i];
+        luma += tex2D(Samplerluma, coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y)).x * kernel[i];
+    }
+
+    return float3(luma.xxx);
+}
 
 float3 BlurH (float3 color, sampler SamplerColor, float2 coord)
 {
@@ -155,6 +226,7 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     float depth, sky, luma;
     float3 tint, orig;
     color  = tex2D(TextureColor, coord).rgb;
+    luma   = tex2D(TextureBlur2, coord).x;
     depth  = ReShade::GetLinearizedDepth(coord);
     sky    = all(1-depth);
 
@@ -162,10 +234,10 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     depth  = pow(abs(depth), lerp(10.0, 0.75, DISTANCE * 0.01));
 
     // Darken the background with distance
-    color  = lerp(color, pow(color, 4.0), depth * sky);
+    color  = lerp(color, pow(color, lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
 
     // Grab the luminance data from the background
-    luma   = GetLuma(color);
+    //luma   = GetLuma(color);
 
     // Desaturate slightly with distance
     color  = lerp(color, lerp(luma, color, 0.75), depth);
@@ -174,7 +246,7 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     tint   = FOG_TINT;
 
     // Optionally modify the fog color value based on original scene luminance
-    if (AUTO_COLOR)
+    if (AUTO_COLOR > 0)
     {
         tint = tint - GetAvg(tint); // Remove average brightness from tint color
         tint = tint + luma;         // Replace tint brightness with scene brightness
@@ -188,17 +260,47 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 }
 
 // SCALE DOWN ////////////////////////////////////
-void PS_Downscale1(PS_IN(vpos, coord), out float3 color : SV_Target)
+void PS_Downscale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
+{
+    if (AUTO_COLOR > 1)
+    {
+        luma = GetLuma(tex2D(TextureColor, SCALE(coord, 0.125)).rgb);
+    }
+    else
+    {
+        luma = GetLuma(tex2D(TextureColor, coord).rgb);
+    }
+}
+
+void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2D(TextureColor, SCALE(coord, 0.5)).rgb;
 }
 
-void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
+void PS_Downscale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
 }
 
 // BI-LATERAL GAUSSIAN BLUR //////////////////////
+void PS_LumaBlurH(PS_IN(vpos, coord), out float3 luma : SV_Target)
+{
+    luma = tex2D(TextureBlur1, coord).x;
+
+    if (AUTO_COLOR > 1)
+    {
+        luma = BlurH(luma, TextureBlur1, coord).xxx;
+    }
+}
+void PS_LumaBlurV(PS_IN(vpos, coord), out float3 luma : SV_Target)
+{
+    luma  = tex2D(TextureBlur2, coord).x;
+
+    if (AUTO_COLOR > 1)
+    {
+        luma = BlurV(luma, TextureBlur2, coord).xxx;
+    }
+}
 void PS_BlurH(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2D(TextureBlur1, coord).rgb;
@@ -211,12 +313,24 @@ void PS_BlurV(PS_IN(vpos, coord), out float3 color : SV_Target)
 }
 
 // SCALE UP //////////////////////////////////////
-void PS_UpScale1(PS_IN(vpos, coord), out float3 color : SV_Target)
+void PS_UpScale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
+{
+    if (AUTO_COLOR > 1)
+    {
+        luma  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
+    }
+    else
+    {
+        luma  = tex2D(TextureBlur1, coord).xxx;
+    }
+}
+
+void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2Dbicub(TextureBlur1, SCALE(coord, 2.0)).rgb;
 }
 
-void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
+void PS_UpScale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     color  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
 }
@@ -271,11 +385,15 @@ TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
     PASS     (VS_Tri, PS_CopyDepth)            // Write the depth buffer to backbuffer
     PASS_AVG ()                                // Generate avgerage depth buffer luma (This helps detect when depth is blank in menus in certain games)
     PASS     (VS_Tri, PS_Restore)              // Restore original backbuffer
+    PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Scale down scene luma 12.5%
+    PASS_RT  (VS_Tri, PS_LumaBlurH,  TexBlur2) // Blur horizontally
+    PASS_RT  (VS_Tri, PS_LumaBlurV,  TexBlur1) // Blur vertically
+    PASS_RT  (VS_Tri, PS_UpScale1,   TexBlur2) // Scale back up to 100% size
     PASS     (VS_Tri, PS_Prep)                 // Prepare the backbuffer for blurring
-    PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Downscale by 50%
-    PASS     (VS_Tri, PS_UpScale1)             // Upscale back to 100% with bi-cubic filtering (this is the small blur)
-    PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Scale down prepped backbuffer from above to 12.5%
+    PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Downscale by 50%
+    PASS     (VS_Tri, PS_UpScale2)             // Upscale back to 100% with bi-cubic filtering (this is the small blur)
+    PASS_RT  (VS_Tri, PS_Downscale3, TexBlur1) // Scale down prepped backbuffer from above to 12.5%
     PASS_RT  (VS_Tri, PS_BlurH,      TexBlur2) // Blur horizontally
     PASS_RT  (VS_Tri, PS_BlurV,      TexBlur1) // Blur vertically
-    PASS_RT  (VS_Tri, PS_UpScale2,   TexBlur2) // Scale back up to 100% size
+    PASS_RT  (VS_Tri, PS_UpScale3,   TexBlur2) // Scale back up to 100% size
     PASS     (VS_Tri, PS_Combine))             // Blend the blurred data and original backbuffer using depth
