@@ -86,6 +86,7 @@ namespace avGen {
                stp.zw = stp.x > stp.y ? stp.zy : stp.xw;
                lvl    = int2(min(lvl.x, lvl.y)-1, 1 << abs(lvl.x-lvl.y) );
 
+        [unroll]
         for(int i=0; i < lvl.y; i++)
             res += tex2Dlod(sampLod, float4(stp.xy + stp.zw*2*i,0,lvl.x)).rgb;
 
