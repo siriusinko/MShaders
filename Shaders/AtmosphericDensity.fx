@@ -47,9 +47,10 @@
 
 #define CATEGORY "Fog Physical Properties" /////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-UI_INT_S (DISTANCE, "Density", "", 1, 100, 75, 0)
-UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "", 0, 100, 100, 0)
+UI_INT_S (DISTANCE, "Density", "Determines the apparent thickness of the fog.", 1, 100, 75, 0)
+UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "Controls how far into the fog that highlights can penetrate.", 0, 100, 100, 0)
 UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 0)
+UI_BOOL  (AUTO_COLOR, "Use Hue Only", "Only uses the hue of the selected color while preserving the brightness of the background.", false, 0)
 #undef  CATEGORY ///////////////////////////////////////////////////////////////
 
 
@@ -151,8 +152,8 @@ void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
 // IMAGE PREP
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    float depth, sky;
-    float3 tint;
+    float depth, sky, luma;
+    float3 tint, orig;
     color  = tex2D(TextureColor, coord).rgb;
     depth  = ReShade::GetLinearizedDepth(coord);
     sky    = all(1-depth);
@@ -160,13 +161,30 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     // Fog density setting (gamma controls how thick the fog is)
     depth  = pow(abs(depth), lerp(10.0, 0.75, DISTANCE * 0.01));
 
+    // Darken the background with distance
+    color  = lerp(color, pow(color, 4.0), depth * sky);
+
+    // Grab the luminance data from the background
+    luma   = GetLuma(color);
+
     // Desaturate slightly with distance
-    color  = lerp(color, lerp(GetLuma(color), color, 0.75), depth);
+    color  = lerp(color, lerp(luma, color, 0.75), depth);
+
+    // Grab the user defined color value for fog
+    tint   = FOG_TINT;
+
+    // Optionally modify the fog color value based on original scene luminance
+    if (AUTO_COLOR)
+    {
+        tint = tint - GetAvg(tint); // Remove average brightness from tint color
+        tint = tint + luma;         // Replace tint brightness with scene brightness
+    }
 
     // Overlay fog color to the scene before blurring in next step.
     // Additional masking for highlight protection. Code is a mess, I know.
-    color  = lerp(color, min(max(FOG_TINT, 0.125), 1.0), depth * (1-smoothstep(0.0, 1.0, color) * (smoothstep(1.0, lerp(0.5, lerp(1.0, 0.75, DISTANCE * 0.01), HIGHLIGHT_DIST * 0.01), depth))));
-                         // Avoid black fog                      // Protect highlights using smoothstep on color input, then place the highlights in the scene with a second smoothstep depth mask (this avoids the original sky color bleeding in)
+    color  = lerp(color, min(max(tint, 0.125), 1.0), depth * (1-smoothstep(0.0, 1.0, color) * (smoothstep(1.0, lerp(0.5, lerp(1.0, 0.75, DISTANCE * 0.01), HIGHLIGHT_DIST * 0.01), depth))));
+                         // Avoid black fog                      // Protect highlights using smoothstep on color input, then place the highlights in the scene with a second smoothstep depth mask
+                                                                 // (this avoids the original sky color bleeding in)
 }
 
 // SCALE DOWN ////////////////////////////////////
