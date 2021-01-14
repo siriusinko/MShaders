@@ -74,6 +74,7 @@ TEXTURE_FULL (TexBlur2,    BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16)
 //////////////////////////////////////////////////
 SAMPLER_UV  (TextureColor, TexColor, MIRROR)
 SAMPLER_UV  (TextureLuma,  TexCopy,  MIRROR)
+SAMPLER_LIN (TextureLin,   TexColor, MIRROR)
 SAMPLER_UV  (TextureDepth, TexDepth, BORDER)
 SAMPLER_UV  (TextureCopy,  TexCopy,  MIRROR)
 SAMPLER_UV  (TextureBlur1, TexBlur1, MIRROR)
@@ -92,6 +93,18 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
 
 // GLOBAL FUNCTIONS //////////////////////////////
 //////////////////////////////////////////////////
+float3 SRGBToLin(float3 SRGBColor)
+{
+    // Fast convert sRGB to linear
+    return saturate((SRGBColor * SRGBColor) - 0.00575);
+}
+
+float3 LinToSRGB(float3 LinearColor)
+{
+    // Fast convert linear to sRGB
+    return saturate(sqrt(LinearColor + 0.00575));
+}
+
 #ifdef _DITHER
     #define        remap(v, a, b) (((v) - (a)) / ((b) - (a)))
 

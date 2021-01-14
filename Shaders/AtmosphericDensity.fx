@@ -20,7 +20,7 @@
 ////                                                                        ////
 ////                          MShaders <> by TreyM                          ////
 ////                          ATMOSPHERIC  DENSITY                          ////
-////                             Verision: 1.0                              ////
+////                             Verision: 1.1                              ////
 ////                                                                        ////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -33,36 +33,60 @@
 // FILE SETUP //////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+#include "ReShade.fxh"
+
+// Configure MShadersMacros.fxh
+#define  CATEGORIZE  // Enable UI category macros
+#include "Include/MShadersMacros.fxh"
+
 // Configure MShadersCommon.fxh
 #define _TIMER       // Enable ReShade timer
 #define _DITHER      // Enable Dither function
 #define _DEPTH_CHECK // Enable checking for depth buffer
-
-#include "ReShade.fxh"
-#include "Include/MShadersMacros.fxh"
 #include "Include/MShadersCommon.fxh"
 
 // UI VARIABLES ////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+// PREPROCESSOR SETTINGS /////////////////////////
+#ifndef ENABLE_MISC_CONTROLS
+    #define ENABLE_MISC_CONTROLS 0
+#endif
+
+#ifndef ENABLE_LINEAR_GAMMA
+    #define ENABLE_LINEAR_GAMMA 0
+#endif
+
 #define CATEGORY "Fog Physical Properties" /////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 UI_INT_S (DISTANCE, "Density", "Determines the apparent thickness of the fog.", 1, 100, 75, 0)
 UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "Controls how far into the fog that highlights can penetrate.", 0, 100, 100, 1)
+
 UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 5)
-UI_COMBO (AUTO_COLOR, "Color Mode", "", 3, 1,
+UI_COMBO (AUTO_COLOR, "Fog Color Mode", "", 3, 1,
     "Exact Fog Color\0"
     "Preserve Scene Luminance\0"
     "Use Blurred Scene Luminance\0")
 UI_INT_S (WIDTH, "Light Scattering", "Controls width of light glow. Needs blurred scene luminance enabled.", 0, 100, 50, 1)
 #undef  CATEGORY ///////////////////////////////////////////////////////////////
 
+#if (ENABLE_MISC_CONTROLS != 0)
+#define CATEGORY "Misc Controls" ///////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+UI_INT_S (FOG_SAT, "Fog Saturation Boost", "(Unrealistic) Boosts the colorfulness of the fog", 0, 100, 0, 0)
+UI_INT_S (BLUR_WIDTH, "Blur Width", "Determines the size of the blur used to generate the fog.", 50, 100, 100, 1)
+UI_INT_S (BLEND, "Overall Blend", "(Unrealistic) Simply mixes fog with the original image.\n"
+                                  "Anything below 100 is not really correct, but\n"
+                                  "the control is here for those who want it.", 0, 100, 100, 1)
+#undef  CATEGORY ///////////////////////////////////////////////////////////////
+#endif
+
 
 // FUNCTIONS ///////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 #include "Include/Functions/AVGen.fxh"
 
-// Only run blur calc within downscaled image bounds
+// Only run blur calc within downscaled image bounds (thanks for the help, kingeric1992)
 #define LOWER_BOUND 0.675
 #define UPPER_BOUND 0.325
 #define LEFT_BOUND  0.325
@@ -102,7 +126,7 @@ float3 BlurH (float luma, sampler Samplerluma, float2 coord)
     for(int i = 1; i < 18; ++i)
     {
         // Only run blur calc within downscaled image bounds
-        if (((coord.x + i * BUFFER_PIXEL_SIZE.x) > RIGHT_BOUND ||
+        if (((coord.x + i * BUFFER_PIXEL_SIZE.x) > RIGHT_BOUND  ||
              (coord.x - i * BUFFER_PIXEL_SIZE.x) < LEFT_BOUND)) continue;
 
         luma += tex2Dlod(Samplerluma, float4(coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).x * kernel[i];
@@ -146,7 +170,7 @@ float3 BlurV (float luma, sampler Samplerluma, float2 coord)
     for(int i = 1; i < 18; ++i)
     {
         // Only run blur calc within downscaled image bounds
-        if (((coord.y + i * BUFFER_PIXEL_SIZE.y) > LOWER_BOUND  ||
+        if (((coord.y + i * BUFFER_PIXEL_SIZE.y) > LOWER_BOUND   ||
              (coord.y - i * BUFFER_PIXEL_SIZE.y) < UPPER_BOUND)) continue;
 
         luma += tex2Dlod(Samplerluma, float4(coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).x * kernel[i];
@@ -190,7 +214,7 @@ float3 BlurH (float3 color, sampler SamplerColor, float2 coord)
     for(int i = 1; i < 18; ++i)
     {
         // Only run blur calc within downscaled image bounds
-        if (((coord.x + i * BUFFER_PIXEL_SIZE.x) > RIGHT_BOUND ||
+        if (((coord.x + i * BUFFER_PIXEL_SIZE.x) > RIGHT_BOUND  ||
              (coord.x - i * BUFFER_PIXEL_SIZE.x) < LEFT_BOUND)) continue;
 
         color += tex2Dlod(SamplerColor, float4(coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).rgb * kernel[i];
@@ -281,6 +305,10 @@ void PS_PrepLuma(PS_IN(vpos, coord), out float3 luma : SV_Target)
 
     // Take only the luminance for next step
     luma  = GetLuma(luma);
+
+    #if (ENABLE_LINEAR_GAMMA != 0)
+        luma = SRGBToLin(luma);
+    #endif
 }
 
 // Full backbuffer
@@ -326,6 +354,10 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     color  = lerp(color, lerp(tint + 0.125, tint, tint), depth * (1-smoothstep(0.0, 1.0, color) * (smoothstep(1.0, lerp(0.5, lerp(1.0, 0.75, DISTANCE * 0.01), HIGHLIGHT_DIST * 0.01), depth))));
                          // Avoid black fog                      // Protect highlights using smoothstep on color input, then place the highlights in the scene with a second smoothstep depth mask
                                                                  // (this avoids the original sky color bleeding in on "Exact Fog Color" mode in the UI)
+
+    #if (ENABLE_LINEAR_GAMMA != 0)
+        color = SRGBToLin(color);
+    #endif
 }
 
 // SCALE DOWN ////////////////////////////////////
@@ -337,7 +369,11 @@ void PS_Downscale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
     if (AUTO_COLOR > 1)
     {
         // Scale down to 12.5% before the blur passes
-        luma = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
+        #if (ENABLE_MISC_CONTROLS != 0)
+            luma = tex2D(TextureColor, SCALE(coord, lerp(0.25, 0.125, BLUR_WIDTH * 0.01))).rgb;
+        #else
+            luma = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
+        #endif
     }
     else
     {
@@ -359,7 +395,11 @@ void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 void PS_Downscale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     // Scale down to 12.5% before the blur passes
-    color  = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
+    #if (ENABLE_MISC_CONTROLS != 0)
+        color = tex2D(TextureColor, SCALE(coord, lerp(0.25, 0.125, BLUR_WIDTH * 0.01))).rgb;
+    #else
+        color = tex2D(TextureColor, SCALE(coord, 0.125)).rgb;
+    #endif
 }
 
 // BI-LATERAL GAUSSIAN BLUR //////////////////////
@@ -407,7 +447,11 @@ void PS_UpScale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
     if (AUTO_COLOR > 1)
     {
         // Scale back up to 100%
-        luma  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
+        #if (ENABLE_MISC_CONTROLS != 0)
+            luma  = tex2Dbicub(TextureBlur1, SCALE(coord, (1.0 / lerp(0.25, 0.125, BLUR_WIDTH * 0.01)))).rgb;
+        #else
+            luma  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
+        #endif
     }
     else
     {
@@ -427,7 +471,11 @@ void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 void PS_UpScale3(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     // Scale color blur back up to 100%
-    color  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
+    #if (ENABLE_MISC_CONTROLS != 0)
+        color  = tex2Dbicub(TextureBlur1, SCALE(coord, (1.0 / lerp(0.25, 0.125, BLUR_WIDTH * 0.01)))).rgb;
+    #else
+        color  = tex2Dbicub(TextureBlur1, SCALE(coord, 8.0)).rgb;
+    #endif
 }
 
 // DRAW FOG //////////////////////////////////////
@@ -443,6 +491,10 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
     sky       = all(1-depth);
     depth_avg = avGen::get().x;
     orig      = color;
+
+    #if (ENABLE_LINEAR_GAMMA != 0)
+        blur = LinToSRGB(blur);
+    #endif
 
     // Fog density setting (gamma controls how thick the fog is)
     depth     = pow(abs(depth), lerp(10.0, 0.33, DISTANCE * 0.01));
@@ -462,14 +514,21 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
     color     = lerp(color, pow(abs(blur), lerp(0.75, 1.0, (AUTO_COLOR != 0))), depth * saturate(1-GetLuma(color * 0.75)));
 
     // Do some additive blending to give the impression of scene lights affecting the fog
-    color     = lerp(color, (color + pow(abs(blur), 0.5)) * 0.5, depth);
+    #if (ENABLE_MISC_CONTROLS != 0)
+        blur  = saturate(lerp(GetLuma(blur), blur, (FOG_SAT + 100) * 0.01));
+    #endif
+    color     = lerp(color, ((color * 0.5) + pow(abs(blur * 2.0), 0.75)) * 0.5, depth);
 
     // Dither to kill any banding
     color    += Dither(color, coord, BitDepth);
 
     // Try to detect when depth buffer is blank to avoid drawing over menus
     if ((depth_avg == 0.0) || (depth_avg == 1.0))
-    color     = orig;
+        color = orig;
+
+    #if (ENABLE_MISC_CONTROLS != 0)
+        color = lerp(orig, color, BLEND * 0.01);
+    #endif
 }
 
 
