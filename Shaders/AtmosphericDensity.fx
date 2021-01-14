@@ -1,56 +1,60 @@
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
-////                                                    ////
-////          MMMMMMMM               MMMMMMMM           ////
-////          M:::::::M             M:::::::M           ////
-////          M::::::::M           M::::::::M           ////
-////          M:::::::::M         M:::::::::M           ////
-////          M::::::::::M       M::::::::::M           ////
-////          M:::::::::::M     M:::::::::::M           ////
-////          M:::::::M::::M   M::::M:::::::M           ////
-////          M::::::M M::::M M::::M M::::::M           ////
-////          M::::::M  M::::M::::M  M::::::M           ////
-////          M::::::M   M:::::::M   M::::::M           ////
-////          M::::::M    M:::::M    M::::::M           ////
-////          M::::::M     MMMMM     M::::::M           ////
-////          M::::::M               M::::::M           ////
-////          M::::::M               M::::::M           ////
-////          M::::::M               M::::::M           ////
-////          MMMMMMMM               MMMMMMMM           ////
-////                                                    ////
-////                MShaders <> by TreyM                ////
-////                ATMOSPHERIC  DENSITY                ////
-////                                                    ////
-////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////                                                                        ////
+////                    MMMMMMMM               MMMMMMMM                     ////
+////                    M:::::::M             M:::::::M                     ////
+////                    M::::::::M           M::::::::M                     ////
+////                    M:::::::::M         M:::::::::M                     ////
+////                    M::::::::::M       M::::::::::M                     ////
+////                    M:::::::::::M     M:::::::::::M                     ////
+////                    M:::::::M::::M   M::::M:::::::M                     ////
+////                    M::::::M M::::M M::::M M::::::M                     ////
+////                    M::::::M  M::::M::::M  M::::::M                     ////
+////                    M::::::M   M:::::::M   M::::::M                     ////
+////                    M::::::M    M:::::M    M::::::M                     ////
+////                    M::::::M     MMMMM     M::::::M                     ////
+////                    M::::::M               M::::::M                     ////
+////                    M::::::M               M::::::M                     ////
+////                    M::::::M               M::::::M                     ////
+////                    MMMMMMMM               MMMMMMMM                     ////
+////                                                                        ////
+////                          MShaders <> by TreyM                          ////
+////                          ATMOSPHERIC  DENSITY                          ////
+////                                                                        ////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////
-//// DO NOT REDISTRIBUTE WITHOUT PERMISSION             ////
-////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//// DO NOT REDISTRIBUTE WITHOUT PERMISSION                                 ////
+////////////////////////////////////////////////////////////////////////////////
 
 
-// FILE SETUP ////////////////////////////////////
-//////////////////////////////////////////////////
+// FILE SETUP //////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Configure MShadersCommon.fxh
+#define _TIMER       // Enable ReShade timer
+#define _DITHER      // Enable Dither function
+#define _DEPTH_CHECK // Enable checking for depth buffer
+
 #include "ReShade.fxh"
 #include "Include/MShadersMacros.fxh"
-
-#define _TIMER_DATA
-#define _INCLUDE_DITHER
-#define _DEPTH_CHECK
 #include "Include/MShadersCommon.fxh"
 
 
-// UI VARIABLES //////////////////////////////////
-//////////////////////////////////////////////////
-#define CATEGORY "Fog Physical Properties"
+// UI VARIABLES ////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+#define CATEGORY "Fog Physical Properties" /////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 UI_INT_S (DISTANCE, "Density", "", 1, 100, 75, 0)
 UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "", 0, 100, 100, 0)
 UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 0)
-#undef  CATEGORY
+#undef  CATEGORY ///////////////////////////////////////////////////////////////
 
 
-// FUNCTIONS /////////////////////////////////////
-//////////////////////////////////////////////////
+// FUNCTIONS ///////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 #include "Include/Functions/AVGen.fxh"
 
 float3 BlurH (float3 color, sampler SamplerColor, float2 coord)
@@ -122,8 +126,8 @@ float3 BlurV (float3 color, sampler SamplerColor, float2 coord)
 }
 
 
-// SHADERS ///////////////////////////////////////
-//////////////////////////////////////////////////
+// SHADERS /////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 #define PS_IN(v, c) float4 v : SV_Position, float2 c : TEXCOORD // Laziness macros FTW
 
 // COPY BACKBUFFER ///////////////////////////////
@@ -147,9 +151,11 @@ void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
 // IMAGE PREP
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    float depth; float3 tint;
+    float depth, sky;
+    float3 tint;
     color  = tex2D(TextureColor, coord).rgb;
     depth  = ReShade::GetLinearizedDepth(coord);
+    sky    = all(1-depth);
 
     // Fog density setting (gamma controls how thick the fog is)
     depth  = pow(abs(depth), lerp(10.0, 0.75, DISTANCE * 0.01));
@@ -200,14 +206,17 @@ void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 // DRAW FOG //////////////////////////////////////
 void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
-    float3 orig, blur, blur2, tint; float depth, depth_avg;
+    float3 orig, blur, blur2, tint;
+    float depth, depth_avg, sky;
 
     blur      = tex2D(TextureBlur2, coord).rgb;
     blur2     = tex2D(TextureColor, coord).rgb;
     color     = tex2D(TextureCopy,  coord).rgb;
     depth     = ReShade::GetLinearizedDepth(coord);
+    sky       = all(1-depth);
     depth_avg = avGen::get();
     orig      = color;
+
 
     // Fog density setting (gamma controls how thick the fog is)
     depth     = pow(abs(depth), lerp(10.0, 0.33, DISTANCE * 0.01));
@@ -217,7 +226,7 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 
     // Darken the already dark parts of the image to give an impression of "shadowing" from fog using the large blur texture
     // Blending this way avoids extra dark halos on bright areas like the sky
-    color     = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)));
+    color     = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)) * sky);
 
     // Overlay the blur texture while lifting its gamma.
     // Mask protects highlights from being darkened
@@ -234,19 +243,19 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 }
 
 
-// TECHNIQUES ////////////////////////////////////
-//////////////////////////////////////////////////
+// TECHNIQUES //////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
              "Atmospheric Density is a psuedo-volumetric\n"
              "fog shader. You will likely need to adjust\n"
              "the fog color to match your scene.",
     PASS_RT  (VS_Tri, PS_Copy,       TexCopy)  // Copy the backbuffer
     PASS     (VS_Tri, PS_CopyDepth)            // Write the depth buffer to backbuffer
-    PASS_AVG ()                                // Generate avgerage depth buffer luma
+    PASS_AVG ()                                // Generate avgerage depth buffer luma (This helps detect when depth is blank in menus in certain games)
     PASS     (VS_Tri, PS_Restore)              // Restore original backbuffer
     PASS     (VS_Tri, PS_Prep)                 // Prepare the backbuffer for blurring
     PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Downscale by 50%
-    PASS     (VS_Tri, PS_UpScale1)             // Upscale back to 100% with bicubic filtering (this is the small blur)
+    PASS     (VS_Tri, PS_UpScale1)             // Upscale back to 100% with bi-cubic filtering (this is the small blur)
     PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Scale down prepped backbuffer from above to 12.5%
     PASS_RT  (VS_Tri, PS_BlurH,      TexBlur2) // Blur horizontally
     PASS_RT  (VS_Tri, PS_BlurV,      TexBlur1) // Blur vertically

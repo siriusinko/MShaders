@@ -30,17 +30,17 @@
 
 // GLOBAL VALUES /////////////////////////////////
 //////////////////////////////////////////////////
-#ifdef _TIMER_DATA
+#ifdef _TIMER
     uniform float  Timer      < source = "timer"; >;
 #endif
 
-#ifdef _FPS_DATA
+#ifdef _FPS
     uniform float  Frametime  < source = "frametime"; >;
     #define        Framerate   (1000.0 /  Frametime)
     uniform int    Framecount < source = "framecount"; >;
 #endif
 
-#ifdef _TIME_DATA
+#ifdef _DATE
 uniform float4 Date           < source = "date"; >;
 #endif
 
@@ -91,7 +91,7 @@ void VS_Tri(in uint id : SV_VertexID, out float4 vpos : SV_Position, out float2 
 
 // GLOBAL FUNCTIONS //////////////////////////////
 //////////////////////////////////////////////////
-#ifdef _INCLUDE_DITHER
+#ifdef _DITHER
     #define        remap(v, a, b) (((v) - (a)) / ((b) - (a)))
 
     float rand21(float2 uv)
