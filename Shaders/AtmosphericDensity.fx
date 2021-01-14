@@ -207,14 +207,14 @@ void PS_UpScale2(PS_IN(vpos, coord), out float3 color : SV_Target)
 void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     float3 orig, blur, blur2, tint;
-    float depth, depth_avg, sky;
+    float  depth, depth_avg, sky;
 
     blur      = tex2D(TextureBlur2, coord).rgb;
     blur2     = tex2D(TextureColor, coord).rgb;
     color     = tex2D(TextureCopy,  coord).rgb;
     depth     = ReShade::GetLinearizedDepth(coord);
     sky       = all(1-depth);
-    depth_avg = avGen::get();
+    depth_avg = avGen::get().x;
     orig      = color;
 
 
