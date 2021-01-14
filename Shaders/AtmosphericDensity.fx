@@ -41,19 +41,19 @@
 #include "Include/MShadersMacros.fxh"
 #include "Include/MShadersCommon.fxh"
 
-
 // UI VARIABLES ////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 #define CATEGORY "Fog Physical Properties" /////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 UI_INT_S (DISTANCE, "Density", "Determines the apparent thickness of the fog.", 1, 100, 75, 0)
-UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "Controls how far into the fog that highlights can penetrate.", 0, 100, 100, 0)
-UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 0)
-UI_COMBO (AUTO_COLOR, "Color Mode", "", 0, 0,
+UI_INT_S (HIGHLIGHT_DIST, "Highlight Distance", "Controls how far into the fog that highlights can penetrate.", 0, 100, 100, 1)
+UI_COLOR (FOG_TINT, "Fog Color", "", 0.4, 0.45, 0.5, 5)
+UI_COMBO (AUTO_COLOR, "Color Mode", "", 2, 1,
     "Exact Fog Color\0"
     "Preserve Scene Luminance\0"
     "Use Blurred Scene Luminance\0")
+UI_INT_S (WIDTH, "Light Scattering", "Controls width of light glow. Needs blurred scene luminance enabled.", 0, 100, 50, 1)
 #undef  CATEGORY ///////////////////////////////////////////////////////////////
 
 
@@ -224,7 +224,7 @@ void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     float depth, sky, luma;
-    float3 tint, orig;
+    float3 tint, orig, width;
     color  = tex2D(TextureColor, coord).rgb;
     luma   = tex2D(TextureBlur2, coord).x;
     depth  = ReShade::GetLinearizedDepth(coord);
@@ -236,9 +236,6 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     // Darken the background with distance
     color  = lerp(color, pow(color, lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
 
-    // Grab the luminance data from the background
-    //luma   = GetLuma(color);
-
     // Desaturate slightly with distance
     color  = lerp(color, lerp(luma, color, 0.75), depth);
 
@@ -248,6 +245,15 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     // Optionally modify the fog color value based on original scene luminance
     if (AUTO_COLOR > 0)
     {
+        // Light scattering
+        if (AUTO_COLOR > 1)
+        {
+            // Curve formula taken from CeeJay.dk's Curves shader
+            width  = sin(3.1415927 * 0.5 * luma);
+            width *= width;
+            luma   = lerp(luma, width, lerp(1.0, -1.0, WIDTH * 0.01));
+        }
+
         tint = tint - GetAvg(tint); // Remove average brightness from tint color
         tint = tint + luma;         // Replace tint brightness with scene brightness
     }
@@ -270,6 +276,8 @@ void PS_Downscale1(PS_IN(vpos, coord), out float3 luma : SV_Target)
     {
         luma = GetLuma(tex2D(TextureColor, coord).rgb);
     }
+
+    luma += Dither(luma, coord, BitDepth);
 }
 
 void PS_Downscale2(PS_IN(vpos, coord), out float3 color : SV_Target)
@@ -289,7 +297,7 @@ void PS_LumaBlurH(PS_IN(vpos, coord), out float3 luma : SV_Target)
 
     if (AUTO_COLOR > 1)
     {
-        luma = BlurH(luma, TextureBlur1, coord).xxx;
+        luma  = BlurH(luma, TextureBlur1, coord).xxx;
     }
 }
 void PS_LumaBlurV(PS_IN(vpos, coord), out float3 luma : SV_Target)
@@ -358,7 +366,10 @@ void PS_Combine(PS_IN(vpos, coord), out float3 color : SV_Target)
 
     // Darken the already dark parts of the image to give an impression of "shadowing" from fog using the large blur texture
     // Blending this way avoids extra dark halos on bright areas like the sky
-    color     = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)) * sky);
+    if (AUTO_COLOR < 1)
+    {
+        color     = lerp(color, lerp(color * pow(abs(blur), 10.0), color, color), depth * saturate(1-GetLuma(color * 0.75)) * sky);
+    }
 
     // Overlay the blur texture while lifting its gamma.
     // Mask protects highlights from being darkened
@@ -388,7 +399,7 @@ TECHNIQUE    (AtmosphericDensity,   "Atmospheric Density",
     PASS_RT  (VS_Tri, PS_Downscale1, TexBlur1) // Scale down scene luma 12.5%
     PASS_RT  (VS_Tri, PS_LumaBlurH,  TexBlur2) // Blur horizontally
     PASS_RT  (VS_Tri, PS_LumaBlurV,  TexBlur1) // Blur vertically
-    PASS_RT  (VS_Tri, PS_UpScale1,   TexBlur2) // Scale back up to 100% size
+    PASS_RT  (VS_Tri, PS_UpScale1,   TexBlur2) // Scale scene luma back up to 100% size
     PASS     (VS_Tri, PS_Prep)                 // Prepare the backbuffer for blurring
     PASS_RT  (VS_Tri, PS_Downscale2, TexBlur1) // Downscale by 50%
     PASS     (VS_Tri, PS_UpScale2)             // Upscale back to 100% with bi-cubic filtering (this is the small blur)
