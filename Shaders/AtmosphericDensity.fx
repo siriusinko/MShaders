@@ -89,8 +89,8 @@ float3 BlurH (float luma, sampler Samplerluma, float2 coord)
     [loop]
     for(int i = 1; i < 18; ++i)
     {
-        luma += tex2Dlod(Samplerluma, float4(coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).x * kernel[i];
-        luma += tex2Dlod(Samplerluma, float4(coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).x * kernel[i];
+        luma += tex2D(Samplerluma, coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0)).x * kernel[i];
+        luma += tex2D(Samplerluma, coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0)).x * kernel[i];
     }
 
     return float3(luma.xxx);
@@ -123,8 +123,8 @@ float3 BlurV (float luma, sampler Samplerluma, float2 coord)
     [loop]
     for(int i = 1; i < 18; ++i)
     {
-        luma += tex2Dlod(Samplerluma, float4(coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).x * kernel[i];
-        luma += tex2Dlod(Samplerluma, float4(coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).x * kernel[i];
+        luma += tex2D(Samplerluma, coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y)).x * kernel[i];
+        luma += tex2D(Samplerluma, coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y)).x * kernel[i];
     }
 
     return float3(luma.xxx);
@@ -157,8 +157,8 @@ float3 BlurH (float3 color, sampler SamplerColor, float2 coord)
     [loop]
     for(int i = 1; i < 18; ++i)
     {
-        color += tex2Dlod(SamplerColor, float4(coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).rgb * kernel[i];
-        color += tex2Dlod(SamplerColor, float4(coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).rgb * kernel[i];
+        color += tex2D(SamplerColor, coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0)).rgb * kernel[i];
+        color += tex2D(SamplerColor, coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0)).rgb * kernel[i];
     }
 
     return color;
@@ -191,8 +191,8 @@ float3 BlurV (float3 color, sampler SamplerColor, float2 coord)
     [loop]
     for(int i = 1; i < 18; ++i)
     {
-        color += tex2Dlod(SamplerColor, float4(coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).rgb * kernel[i];
-        color += tex2Dlod(SamplerColor, float4(coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).rgb * kernel[i];
+        color += tex2D(SamplerColor, coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y)).rgb * kernel[i];
+        color += tex2D(SamplerColor, coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y)).rgb * kernel[i];
     }
 
     return color;
@@ -221,23 +221,20 @@ void PS_Restore(PS_IN(vpos, coord), out float3 color : SV_Target)
     color  = tex2D(TextureCopy, coord).rgb;
 }
 
-// IMAGE PREP ////////////////////////////////////
-// Luma
+// IMAGE PREP
 void PS_PrepLuma(PS_IN(vpos, coord), out float3 luma : SV_Target)
 {
     float depth, sky;
-    luma  = tex2D(TextureColor, coord).rgb;
-    depth = ReShade::GetLinearizedDepth(coord);
-    sky   = all(1-depth);
+    depth  = ReShade::GetLinearizedDepth(coord);
+    sky    = all(1-depth);
 
-    // Darken the background with distance
-    luma  = lerp(luma, pow(abs(luma), lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
+    luma = tex2D(TextureColor, coord).rgb;
 
-    // Take only the luminance for next step
-    luma  = GetLuma(luma);
+    luma = lerp(luma, pow(luma, lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
+
+    luma = GetLuma(luma);
 }
 
-// Full backbuffer
 void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
 {
     float depth, sky, width, luma;
@@ -251,7 +248,7 @@ void PS_Prep(PS_IN(vpos, coord), out float3 color : SV_Target)
     depth  = pow(abs(depth), lerp(10.0, 0.75, DISTANCE * 0.01));
 
     // Darken the background with distance
-    color  = lerp(color, pow(abs(color), lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
+    color  = lerp(color, pow(color, lerp(2.0, 4.0, DISTANCE * 0.01)), depth * sky);
 
     // Desaturate slightly with distance
     color  = lerp(color, lerp(GetLuma(color), color, lerp(0.75, 1.0, (AUTO_COLOR != 0))), depth);
