@@ -72,9 +72,9 @@ TEXTURE_FULL (TexBlur2,    BUFFER_WIDTH, BUFFER_HEIGHT, RGBA16F)
 
 // SAMPLERS //////////////////////////////////////
 //////////////////////////////////////////////////
-SAMPLER_UV  (TextureColor, TexColor, BORDER)
+SAMPLER_UV  (TextureColor, TexColor, MIRROR)
 SAMPLER_UV  (TextureDepth, TexDepth, BORDER)
-SAMPLER_UV  (TextureCopy,  TexCopy,  BORDER)
+SAMPLER_UV  (TextureCopy,  TexCopy,  MIRROR)
 SAMPLER_UV  (TextureBlur1, TexBlur1, MIRROR)
 SAMPLER_UV  (TextureBlur2, TexBlur2, MIRROR)
 
