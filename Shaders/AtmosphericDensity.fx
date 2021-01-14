@@ -62,6 +62,12 @@ UI_INT_S (WIDTH, "Light Scattering", "Controls width of light glow. Needs blurre
 ////////////////////////////////////////////////////////////////////////////////
 #include "Include/Functions/AVGen.fxh"
 
+// Only run blur calc within downscaled image bounds
+#define LOWER_BOUND 0.675
+#define UPPER_BOUND 0.325
+#define LEFT_BOUND  0.325
+#define RIGHT_BOUND 0.675
+
 float3 BlurH (float luma, sampler Samplerluma, float2 coord)
 {
     float offset[18] =
@@ -86,9 +92,19 @@ float3 BlurH (float luma, sampler Samplerluma, float2 coord)
 
     luma *= kernel[0];
 
+    [branch]
+    // Only run blur calc within downscaled image bounds
+    if ((coord.x > RIGHT_BOUND || coord.x < LEFT_BOUND   ||
+         coord.y > LOWER_BOUND || coord.y < UPPER_BOUND))
+         return luma;
+
     [loop]
     for(int i = 1; i < 18; ++i)
     {
+        // Only run blur calc within downscaled image bounds
+        if (((coord.x + i * BUFFER_PIXEL_SIZE.x) > RIGHT_BOUND ||
+             (coord.x - i * BUFFER_PIXEL_SIZE.x) < LEFT_BOUND)) continue;
+
         luma += tex2Dlod(Samplerluma, float4(coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).x * kernel[i];
         luma += tex2Dlod(Samplerluma, float4(coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).x * kernel[i];
     }
@@ -120,9 +136,19 @@ float3 BlurV (float luma, sampler Samplerluma, float2 coord)
 
     luma *= kernel[0];
 
+    [branch]
+    // Only run blur calc within downscaled image bounds
+    if ((coord.x > RIGHT_BOUND || coord.x < LEFT_BOUND   ||
+         coord.y > LOWER_BOUND || coord.y < UPPER_BOUND))
+         return luma;
+
     [loop]
     for(int i = 1; i < 18; ++i)
     {
+        // Only run blur calc within downscaled image bounds
+        if (((coord.y + i * BUFFER_PIXEL_SIZE.y) > LOWER_BOUND  ||
+             (coord.y - i * BUFFER_PIXEL_SIZE.y) < UPPER_BOUND)) continue;
+
         luma += tex2Dlod(Samplerluma, float4(coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).x * kernel[i];
         luma += tex2Dlod(Samplerluma, float4(coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).x * kernel[i];
     }
@@ -154,9 +180,19 @@ float3 BlurH (float3 color, sampler SamplerColor, float2 coord)
 
     color *= kernel[0];
 
+    [branch]
+    // Only run blur calc within downscaled image bounds
+    if ((coord.x > RIGHT_BOUND || coord.x < LEFT_BOUND   ||
+         coord.y > LOWER_BOUND || coord.y < UPPER_BOUND))
+         return color;
+
     [loop]
     for(int i = 1; i < 18; ++i)
     {
+        // Only run blur calc within downscaled image bounds
+        if (((coord.x + i * BUFFER_PIXEL_SIZE.x) > RIGHT_BOUND ||
+             (coord.x - i * BUFFER_PIXEL_SIZE.x) < LEFT_BOUND)) continue;
+
         color += tex2Dlod(SamplerColor, float4(coord + float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).rgb * kernel[i];
         color += tex2Dlod(SamplerColor, float4(coord - float2(offset[i] * BUFFER_PIXEL_SIZE.x, 0.0), 0.0, 0.0)).rgb * kernel[i];
     }
@@ -188,9 +224,19 @@ float3 BlurV (float3 color, sampler SamplerColor, float2 coord)
 
     color *= kernel[0];
 
+    [branch]
+    // Only run blur calc within downscaled image bounds
+    if ((coord.x > RIGHT_BOUND || coord.x < LEFT_BOUND   ||
+         coord.y > LOWER_BOUND || coord.y < UPPER_BOUND))
+         return color;
+
     [loop]
     for(int i = 1; i < 18; ++i)
     {
+        // Only run blur calc within downscaled image bounds
+        if (((coord.y + i * BUFFER_PIXEL_SIZE.y) > LOWER_BOUND  ||
+             (coord.y - i * BUFFER_PIXEL_SIZE.y) < UPPER_BOUND)) continue;
+
         color += tex2Dlod(SamplerColor, float4(coord + float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).rgb * kernel[i];
         color += tex2Dlod(SamplerColor, float4(coord - float2(0.0, offset[i] * BUFFER_PIXEL_SIZE.y), 0.0, 0.0)).rgb * kernel[i];
     }
